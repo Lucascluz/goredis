@@ -82,6 +82,62 @@ func (c *Cache) Delete(key string) bool {
 	return exists
 }
 
+func (c *Cache) Exists(key string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	item, exists := c.items[key]
+	if !exists {
+		return false
+	}
+
+	// Check if expired
+	if item.ExpiresAt != nil && time.Now().After(*item.ExpiresAt) {
+		// Remove expired item (need write lock)
+		c.mu.RUnlock()
+		c.mu.Lock()
+		delete(c.items, key)
+		c.mu.Unlock()
+		c.mu.RLock()
+		return false
+	}
+
+	return true
+}
+
+func (c *Cache) Keys() []string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+
+	keys := make([]string, 0, len(c.items))
+	now := time.Now()
+
+	for key, item := range c.items {
+		// Skip expired items
+		if item.ExpiresAt != nil && now.After(*item.ExpiresAt) {
+			continue
+		}
+		keys = append(keys, key)
+	}
+
+	return keys
+}
+
+func (c *Cache) Flush() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	count := len(c.items)
+	c.items = make(map[string]*CacheItem)
+	return count
+}
+
+func (c *Cache) Size() int {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return len(c.items)
+}
+
 // start clean up cicle
 func (c *Cache) startCleanup() {
 	ticker := time.NewTicker(5 * time.Minute)

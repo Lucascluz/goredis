@@ -25,8 +25,9 @@ func SET(c *gin.Context) {
 
 	// get item from body
 	var req SetRequest
-	if err := c.ShouldBindBodyWithJSON(&req); err != nil {
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request format"})
+		return
 	}
 
 	// insert pair on the map
@@ -45,8 +46,46 @@ func SET(c *gin.Context) {
 
 	// return response
 	c.JSON(http.StatusOK, gin.H{
-		"status": "succes",
+		"status": "success",
 		"key":    key,
+	})
+}
+
+func EXISTS(c *gin.Context) {
+	key := c.Param("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
+		return
+	}
+
+	_, exists := cacheInstance.Get(key)
+	c.JSON(http.StatusOK, gin.H{
+		"key":    key,
+		"exists": exists,
+	})
+}
+
+func KEYS(c *gin.Context) {
+	// For now, return all keys (in production, add pagination)
+	keys := cacheInstance.Keys()
+	c.JSON(http.StatusOK, gin.H{
+		"keys":  keys,
+		"count": len(keys),
+	})
+}
+
+func FLUSH(c *gin.Context) {
+	count := cacheInstance.Flush()
+	c.JSON(http.StatusOK, gin.H{
+		"status":       "success",
+		"keys_flushed": count,
+	})
+}
+
+func HEALTH(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"status": "healthy",
+		"time":   time.Now().Unix(),
 	})
 }
 
@@ -62,6 +101,7 @@ func GET(c *gin.Context) {
 	value, exists := cacheInstance.Get(key)
 	if !exists {
 		c.JSON(http.StatusNotFound, gin.H{"error": "key expired or do not exist"})
+		return
 	}
 
 	// return value
@@ -72,5 +112,24 @@ func GET(c *gin.Context) {
 }
 
 func DELETE(c *gin.Context) {
-	
+
+	// get key from header
+	key := c.Param("key")
+	if key == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "key is required"})
+		return
+	}
+
+	// delete key if exists
+	exists := cacheInstance.Delete(key)
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "key expired or do not exist"})
+		return
+	}
+
+	// return confirmation
+	c.JSON(http.StatusOK, gin.H{
+		"status": "delete",
+		"key":    key,
+	})
 }
